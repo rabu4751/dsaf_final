@@ -1,0 +1,93 @@
+---
+title: "NYPD_Data"
+author: "R. Buessing"
+date: "10/11/2021"
+output: html_document
+---
+```{r get_NYPD_data, echo=FALSE,message=FALSE}
+library(tidyverse)
+library(tidyr)
+url_in = "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+nypd_data = read_csv(url_in)
+nypd_data<-na.omit(nypd_data)
+view(nypd_data)
+```
+In this report we investigate possible correlation between multiple data points in the NYPD Shooting Incident data. We look at whether or not factors such as age, location, sex, and ethnicity impact the volume and severity of shooting incident in New York City.
+
+The code behind this report can be located at the following public GitHub repository: https://github.com/rabu4751/dsaf_final
+
+Below are several charts that detail these potential correlations.
+
+## Data Plots
+
+```{r plot_size, echo=FALSE,message=FALSE}
+knitr::opts_chunk$set(fig.width=8 , fig.height=4) 
+```
+
+```{r date_conversion, echo=FALSE,message=FALSE}
+library(lubridate)
+ct <- nypd_data %>%
+  mutate(Date=mdy(OCCUR_DATE))
+```
+
+```{r graph1, echo=FALSE,message=FALSE}
+library(ggplot2)
+
+p1 <-ggplot(ct, aes(x=reorder(BORO,BORO,function(x) -length(x)),fill=STATISTICAL_MURDER_FLAG))+
+  geom_bar(position = position_stack(reverse = TRUE))+
+  xlab("Borough") + labs(fill='Murder True/False')+
+  ggtitle("Incidents & Murders by Borough")
+  
+  
+
+
+p2 <-ggplot(ct, aes(x=reorder(PERP_SEX,PERP_SEX,function(x) -length(x)),fill=PERP_AGE_GROUP)) +
+  geom_bar(position = position_stack(reverse = TRUE))+
+  xlab("Perp. Sex") + labs(fill='Perp. Age') +
+  ggtitle("Perp. Sex & Perp. Age")
+
+p3 <-ggplot(ct, aes(x=reorder(PERP_RACE,PERP_RACE,function(x) -length(x)),fill=VIC_RACE)) +
+  geom_bar(position = position_stack(reverse = TRUE))+
+  theme(axis.text.x = element_text(angle = 20, vjust = 1, hjust = 1))+
+  xlab("Perp. Race") + labs(fill='Victim Race')+
+  ggtitle("Perp. Race & Victim Race")
+
+par(mfrow=c(3,1))
+p1
+p2
+p3
+
+
+#plot_grid(p1, p2,ncol=2,nrow=2)
+#plot_grid(p3,ncol=1,nrow=1)
+```
+
+
+## Findings
+
+From these charts we get an idea of what factors influence the volume of shooting incidents. We can see that the poorer borough's have a significantly higher number of shooting incidents compared to wealthier borough's. Not only this, the incidents that do occur in poorer regions also tend to have a higher murder rate. We can also see that perpetrators of these crimes are generally male and are of Black or Hispanic ethnicity. It's important to note that there may be bias here in the form of under reporting (similar to sampling bias) for those of White ethnicity and female incidents while on the other hand over reporting could lead to what we see in our data now with a possible misrepresentation of Black and Hispanic incidents. I also purposely left three outliers in the Perp. Age & Perp. Sex graph to show a form of measurement bias in the fact that the ages shown were obviously a result of human error when entering the data. 
+
+## Predictions
+
+Below we take several of the data points from the data (displayed below) to predict the probability of surviving a shooting incident in New York City. This model uses logisitc regression to make this prediction.
+
+```{r model, message=FALSE,echo=FALSE}
+ct$STATISTICAL_MURDER_FLAG <- as.integer(as.logical(ct$STATISTICAL_MURDER_FLAG))
+#view(ct)
+mod <- glm(STATISTICAL_MURDER_FLAG ~ BORO+ VIC_RACE+VIC_AGE_GROUP+PERP_AGE_GROUP+LOCATION_DESC,family="binomial",data=ct )
+#summary(mod)
+```
+```{r predict, message=FALSE,echo=FALSE}
+
+newdata = data.frame(BORO=c("BRONX","QUEENS","MANHATTAN"),VIC_RACE=c("BLACK","WHITE HISPANIC","WHITE"),VIC_AGE_GROUP=c("18-24","25-44","65+"),PERP_AGE_GROUP=c("18-24","25-44","65+"),LOCATION_DESC=c("MULTI DWELL - PUBLIC HOUS","PVT HOUSE","PVT HOUSE"))
+library(knitr)
+kable(newdata,caption="Data to Predict on")
+pred <-predict(mod, newdata, type="response")
+kable(pred,caption="Prediciton/Survival Probability")
+```
+
+## Conclusion
+
+As we can see, the prediction follows the trends we saw earlier with the White, wealthy individual having the highest survival probability compared to the Black and Hispanic individuals located in the poorer regions of the city. The graphs and model used in this report only used complete data while non-complete data was filtered out. 
+
+  
