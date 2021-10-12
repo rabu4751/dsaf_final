@@ -1,0 +1,151 @@
+---
+title: "dsaf_final_project_covid"
+author: "R. Buessing"
+date: "10/11/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+In this report we'll be comparing COVID19 cases between New York and Florida, two states with almost identical populations but also with two completely different approaches to handling the pandemic. 
+
+Before we begin, this report, the U.S. cases and deaths data from John Hopkins, and R code can be viewed at the following public GitHub repo: https://github.com/rabu4751/dsaf_final
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+
+```{r load, include=FALSE}
+library(tidyverse)
+library(tidyr)
+library(lubridate)
+
+
+us_deaths = read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
+
+us_cases = read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
+
+```
+
+```{r plot_size, echo=FALSE,message=FALSE}
+knitr::opts_chunk$set(fig.width=8 , fig.height=4) 
+```
+
+```{r tidy_cases, include=FALSE}
+drops <- c("iso2","iso3","UID","code3","FIPS","Admin2","Combined_Key")
+us_cases <- us_cases[ , !(names(us_cases) %in% drops)]
+us_cases <- us_cases %>%
+  
+  pivot_longer(cols = -c(`Province_State`,
+                         `Country_Region`,Lat,Long_),
+               names_to = "date",
+               values_to = "cases") %>%
+  mutate(date=mdy(date)) %>%
+  select(-c(Lat,Long_))
+  
+
+```
+
+```{r tidy_deaths, include = FALSE}
+
+us_deaths <- us_deaths[ , !(names(us_deaths) %in% drops)]
+us_deaths <- us_deaths %>%
+
+  pivot_longer(cols = -c(`Province_State`,
+                         `Country_Region`,Lat,Long_),
+               names_to = "date",
+               values_to = "deaths") %>%
+  mutate(date=mdy(date)) %>%
+  select(-c(Lat,Long_))
+
+```
+
+```{r join, include = FALSE}
+us_tot <- us_cases %>%
+  full_join(us_deaths)
+
+```
+
+```{r by_state, echo=FALSE, message=FALSE}
+us_by_state <- us_tot %>%
+  group_by (Province_State, Country_Region,date)%>%
+  summarize(cases = sum(cases), deaths = sum(deaths),
+    Population = 332865687) %>%
+  mutate(deaths_per_mill = deaths *1000000 / Population) %>%
+  select(Province_State, Country_Region,date,cases,deaths, deaths_per_mill,Population)%>%
+  ungroup()
+```
+
+## Data Plots
+
+Below are two charts that compare COVID19 cases and deaths between Florida and New York.
+
+```{r plot1, echo=FALSE, message=FALSE,include=FALSE,warning=FALSE}
+library(ggplot2)
+
+NY <- us_by_state %>%
+  filter(Province_State== "New York")
+FL <- us_by_state %>%
+  filter(Province_State == "Florida")
+p1 <- ggplot()+
+  ggtitle("NY vs. FL COVID19 Cases")+
+  geom_point(data = NY,aes(x=date,y=cases),color='blue')+
+  geom_point(data = FL,aes(x=date,y=cases),color='red')+
+  scale_y_log10()
+```
+
+```{r plot2, echo=FALSE, message=FALSE}
+
+NY2 <- us_by_state %>%
+  filter(Province_State== "New York")
+FL2 <- us_by_state %>%
+  filter(Province_State == "Florida")
+p2 <- ggplot()+
+  ggtitle("NY vs. FL COVID19 Deaths")+
+  geom_point(data = NY2,aes(x=date,y=deaths),color='blue')+
+  geom_point(data = FL2,aes(x=date,y=deaths),color='red')+
+  scale_y_log10()
+
+par(mfrow=c(2,1))
+p1
+p2
+```
+
+## Findings 
+
+Interestingly enough, at the beginning of the pandemic, New York had a much quicker spike in the number of COVID19 cases in the State while Florida took a couple months to catch up and eventually pass New York consistently in overall cases. In regards to deaths, New York has actually outpaced Florida until just recently which could indicate the overall preparedness of each state as the pandemic largely begin for the U.S. in New York. Florida may have had the opportunity to learn from New York and prepare their health infrastructure before COVID19 had a stronger foothold in the state.It's important to note that due to the speed and ever changing nature of the virus thus far, data could possibly be lagging behind what is currently available, however this should not fuel biases or theories that the data is heavily skewed in any given direction. Measurement bias due to human error would likely be the most prevalent form of bias in this data.
+
+## Prediction
+
+Using the same does as above, I created a linear regression model for Florida to see if the model would predict
+more or less deaths in Florida. The model is able to predict fairly well with the exception of the most recent data where the model was over predicting deaths but has begun to gradually level out. 
+
+```{r model, message=FALSE,echo=FALSE}
+mod <- lm(deaths~cases,data = NY)
+mod2 <- lm(deaths~cases,data = FL)
+
+FL <- FL %>%
+  slice(-1)
+  
+```
+```{r add_model, message=FALSE,echo=FALSE}
+FL_pred <- FL %>%
+  mutate(pred=predict(mod2))
+  
+```
+
+```{r plot3, message=FALSE,echo=FALSE}
+p3 <- FL_pred %>% ggplot() +
+  geom_point(aes(x=cases,y=deaths),color="blue")+
+  geom_point(aes(x=cases,y=pred),color="red")+
+  ylim(0,4000000)
+
+par(mfrow=c(1,1))
+p3
+```
+
+## Conclusion
+
+Despite New York having what most would consider a stricter approach to the COVID19 pandemic, only recently has the state be surpassed by a more lenient state such as Florida. This could be due to the timing of the virus and when it struck each state as well as the overall medical infrastructure of each state. Bias in this data would likely be from measurement bias as a result of human error and inputting the data incorrectly or simply not having all of the available data due to how fast data changes on COVID19.
